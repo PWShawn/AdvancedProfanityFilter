@@ -30,6 +30,8 @@ export default class WebAudio {
   lastProcessedText: string;
   muted: boolean;
   rules: AudioRule[];
+  shadowContainer: ShadowRoot;
+  shadowContainerObserver: MutationObserver;
   sites: { [site: string]: AudioRule[] };
   siteKey: string;
   supportedPage: boolean;
@@ -90,6 +92,7 @@ export default class WebAudio {
     this.youTubeAutoSubsMax = filter.cfg.youTubeAutoSubsMax * 1000;
     this.youTubeAutoSubsMin = filter.cfg.youTubeAutoSubsMin;
     this.youTubeAutoSubsUnmuteDelay = 0;
+    // this.shadowContainerObserver = new MutationObserver(this.processAudioMutations);
 
     // Setup rules for current site
     this.siteKey = this.getSiteKey();
@@ -376,6 +379,7 @@ export default class WebAudio {
 
   initElementChildRule(rule: AudioRule) {
     if (!rule.parentSelector && !rule.parentSelectorAll) { rule.disabled = true; }
+    // if (rule.disabled && rule.shadowContainerSelector) { rule.disabled = false; }
   }
 
   initElementRule(rule: AudioRule) { }
@@ -456,6 +460,8 @@ export default class WebAudio {
           setInterval(this.watchForVideo, 250, this);
         } else if (rule.mode == 'watcher') {
           setInterval(this.watcher, rule.checkInterval, this, ruleId);
+        // } else if (rule.mode == 'elementChild' && rule.shadowContainerSelector) {
+        //   setInterval(this.watchForShadowContainer, 500, rule.shadowContainerSelector, this);
         }
       }
     }
@@ -888,8 +894,14 @@ export default class WebAudio {
             const root = rule.rootNode ? node.getRootNode() : document;
             if (root) {
               if (rule.parentSelector) {
-                const parent = root.querySelector(rule.parentSelector);
-                if (parent && parent.contains(node)) { return ruleId; }
+                // TODO: Cache this?
+                if (rule.parentSelector.includes('>>>')) {
+                  const parent = getElement(rule.parentSelector);
+                  if (parent && parent.contains(node)) { return ruleId; }
+                } else {
+                  const parent = root.querySelector(rule.parentSelector);
+                  if (parent && parent.contains(node)) { return ruleId; }
+                }
               } else {
                 const parents = root.querySelectorAll(rule.parentSelectorAll);
                 for (let j = 0; j < parents.length; j++) {
@@ -1006,6 +1018,7 @@ export default class WebAudio {
         captions = Array.from(getElements(rule.subtitleSelector));
         if (captions && captions.length) {
           logger.debug('[Watcher] Found captions to process', captions);
+          // TODO: document.body.contains won't work here...
           if (rule.displayVisibility && (!rule._displayElement || !document.body.contains(rule._displayElement))) {
             rule._displayElement = getParent(captions[0], rule.displayElementLevels);
           }
@@ -1094,6 +1107,24 @@ export default class WebAudio {
         }
       }
     }
+  }
+
+  watchForShadowContainer(selector: string, instance: WebAudio) {
+    // TODO: if not already observer...
+    // TODO: Maybe add an attribute to first child?
+    // Periodic check to refresh?
+    // const observerConfig: MutationObserverInit = {
+    //   characterData: true,
+    //   characterDataOldValue: true,
+    //   childList: true,
+    //   subtree: true,
+    // };
+
+    // const target = getElement(selector);
+    // if (target) {
+    //   instance.filter.audioObserver.observe(target, observerConfig);
+    // }
+    // TODO: Check audio only mode
   }
 
   watcherSimpleUnmute(rule: AudioRule, video: HTMLVideoElement) {

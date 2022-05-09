@@ -26,6 +26,7 @@ export default class WebFilter extends Filter {
   processMutationTarget: boolean;
   processNode: (node: HTMLElement | Document | ShadowRoot, wordlistId: number, statsType?: string | null) => void;
   shadowObserver: MutationObserver;
+  audioObserver: MutationObserver;
   stats: Statistics;
   summary: Summary;
 
@@ -242,6 +243,7 @@ export default class WebFilter extends Filter {
       this.mutePage = this.audio.supportedPage;
       if (this.mutePage) {
         logger.info(`[Audio] Enabling audio muting on ${this.hostname}.`);
+        filter.audioObserver = new MutationObserver(filter.processAudioMutations);
         // Prebuild audio wordlist
         if (this.cfg.wordlistsEnabled && this.wordlistId != this.audio.wordlistId) {
           this.wordlists[this.audio.wordlistId] = new Wordlist(this.cfg, this.audio.wordlistId);
@@ -401,6 +403,53 @@ export default class WebFilter extends Filter {
       }
       sendResponse(); // Issue 393 - Chrome 99+ promisified sendMessage expects callback to be called
     });
+  }
+
+  // Used for "deep" elements hidden in the Shadow DOM
+  processAudioMutations(mutations) {
+    mutations.forEach((mutation) => {
+      mutation.addedNodes.forEach((node) => {
+        // TODO: Changed this -> filter
+        if (!Page.isForbiddenNode(node)) {
+          // TODO: Add rule to disable other audio muting when this is enabled
+          filter.cleanAudio(node);
+        }
+      });
+
+      // Check removed nodes to see if we should unmute
+      if (filter.audio.muted) {
+        mutation.removedNodes.forEach((node) => {
+          const supported = filter.audio.supportedNode(node);
+          const rule = supported !== false ? filter.audio.rules[supported] : filter.audio.rules[0]; // Use the matched rule, or the first rule
+          if (
+            supported !== false
+            || node == filter.audio.lastFilteredNode
+            || node.contains(filter.audio.lastFilteredNode)
+            || (
+              rule.simpleUnmute
+              && node.textContent
+              && filter.audio.lastFilteredText
+              && filter.audio.lastFilteredText.includes(node.textContent)
+            )
+          ) {
+            filter.audio.unmute(rule);
+          }
+        });
+      }
+
+      if (mutation.target) {
+        if (mutation.target.nodeName === '#text') {
+          filter.checkMutationTargetTextForProfanity(mutation); // TODO: Need to be updated?
+        } else if (filter.processMutationTarget) {
+          if (!Page.isForbiddenNode(mutation.target)) {
+            // TODO: Add rule to disable other audio muting when this is enabled
+            filter.cleanAudio(mutation.target);
+          }
+          filter.processNode(mutation.target, filter.wordlistId);
+        }
+      }
+    });
+    filter.updateCounterBadge();
   }
 
   processMutations(mutations) {

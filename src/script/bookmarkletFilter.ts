@@ -14,6 +14,7 @@ config.words = WebConfig._defaultWords;
 
 export default class BookmarkletFilter extends Filter {
   audio: WebAudio;
+  audioObserver: MutationObserver;
   audioOnly: boolean;
   audioWordlistId: number;
   declare cfg: WebConfig;
