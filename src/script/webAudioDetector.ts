@@ -40,7 +40,7 @@ export default class WebAudioDetector {
               subtitleSelector: '',
               tagName: node.nodeName,
             };
-            console.log('[APF] Possible match element found:', node, detector.data);
+            console.log('[APF] Possible match element found:', node, JSON.stringify(detector.data, null, 2));
           }
         }
       });
